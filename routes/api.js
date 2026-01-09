@@ -2,53 +2,59 @@
 
 const { v4: uuidv4 } = require('uuid');
 
-let issues = [];
-
 module.exports = function (app) {
+
+  // In-memory storage (FCC allows this)
+  let issues = [];
 
   app.route('/api/issues/:project')
 
-    // =========================
+    // =======================
     // GET
-    // =========================
-    .get(function (req, res){
-      let project = req.params.project;
-      let filters = req.query;
+    // =======================
+    .get((req, res) => {
+      const project = req.params.project;
+      const filters = req.query;
 
-      let filtered = issues.filter(issue => {
-        if (issue.project !== project) return false;
-        for (let key in filters) {
-          if (issue[key] != filters[key]) return false;
-        }
-        return true;
+      let result = issues.filter(issue => issue.project === project);
+
+      Object.keys(filters).forEach(key => {
+        result = result.filter(issue => {
+          if (issue[key] === undefined) return false;
+          return issue[key].toString() === filters[key].toString();
+        });
       });
 
-      res.json(filtered);
+      res.json(result);
     })
 
-    // =========================
+    // =======================
     // POST
-    // =========================
-    .post(function (req, res){
-      let project = req.params.project;
-      const { issue_title, issue_text, created_by, assigned_to, status_text } = req.body;
+    // =======================
+    .post((req, res) => {
+      const project = req.params.project;
+      const {
+        issue_title,
+        issue_text,
+        created_by,
+        assigned_to = '',
+        status_text = ''
+      } = req.body;
 
       if (!issue_title || !issue_text || !created_by) {
         return res.json({ error: 'required field(s) missing' });
       }
 
-      let now = new Date().toISOString();
-
-      let newIssue = {
+      const newIssue = {
         _id: uuidv4(),
         project,
         issue_title,
         issue_text,
         created_by,
-        assigned_to: assigned_to || '',
-        status_text: status_text || '',
-        created_on: now,
-        updated_on: now,
+        assigned_to,
+        status_text,
+        created_on: new Date(),
+        updated_on: new Date(),
         open: true
       };
 
@@ -56,55 +62,84 @@ module.exports = function (app) {
       res.json(newIssue);
     })
 
-    // =========================
+    // =======================
     // PUT
-    // =========================
-    .put(function (req, res){
-      let project = req.params.project;
-      let { _id, ...updates } = req.body;
+    // =======================
+    .put((req, res) => {
+      const project = req.params.project;
+      const { _id, ...updates } = req.body;
 
+      // Missing _id
       if (!_id) {
         return res.json({ error: 'missing _id' });
       }
 
-      let issue = issues.find(i => i._id === _id && i.project === project);
-      if (!issue) {
-        return res.json({ error: 'could not update', _id });
-      }
-
-      let updateKeys = Object.keys(updates).filter(k => updates[k] !== undefined && updates[k] !== '');
-
-      if (updateKeys.length === 0) {
-        return res.json({ error: 'no update field(s) sent', _id });
-      }
-
-      updateKeys.forEach(key => {
-        issue[key] = updates[key];
+      // Remove empty update fields
+      Object.keys(updates).forEach(key => {
+        if (
+          updates[key] === '' ||
+          updates[key] === null ||
+          updates[key] === undefined
+        ) {
+          delete updates[key];
+        }
       });
 
-      issue.updated_on = new Date().toISOString();
+      // 🚨 FCC TEST #9 REQUIREMENT
+      if (Object.keys(updates).length === 0) {
+        return res.json({
+          error: 'no update field(s) sent',
+          _id: _id
+        });
+      }
 
-      res.json({ result: 'successfully updated', _id });
+      const issue = issues.find(
+        issue => issue._id === _id && issue.project === project
+      );
+
+      if (!issue) {
+        return res.json({
+          error: 'could not update',
+          _id: _id
+        });
+      }
+
+      Object.assign(issue, updates);
+      issue.updated_on = new Date();
+
+      res.json({
+        result: 'successfully updated',
+        _id: _id
+      });
     })
 
-    // =========================
+    // =======================
     // DELETE
-    // =========================
-    .delete(function (req, res){
-      let project = req.params.project;
-      let { _id } = req.body;
+    // =======================
+    .delete((req, res) => {
+      const project = req.params.project;
+      const { _id } = req.body;
 
       if (!_id) {
         return res.json({ error: 'missing _id' });
       }
 
-      let index = issues.findIndex(i => i._id === _id && i.project === project);
+      const index = issues.findIndex(
+        issue => issue._id === _id && issue.project === project
+      );
 
       if (index === -1) {
-        return res.json({ error: 'could not delete', _id });
+        return res.json({
+          error: 'could not delete',
+          _id: _id
+        });
       }
 
       issues.splice(index, 1);
-      res.json({ result: 'successfully deleted', _id });
+
+      res.json({
+        result: 'successfully deleted',
+        _id: _id
+      });
     });
 };
